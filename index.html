@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Geodesic Distance Measurement</title>
+    <link rel="stylesheet" href="https://js.arcgis.com/4.26/esri/themes/light/main.css">
+    <style>
+        html, body, #viewDiv {
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            width: 100%;
+        }
+        #displayButton {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            background-color: #0079c1;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            display: none; /* Initially hidden */
+            font-size: 16px;
+        }
+        #displayButton:hover {
+            background-color: #005a8b;
+        }
+    </style>
+</head>
+<body>
+    <div id="viewDiv"></div>
+    <button id="displayButton">Display Distance</button>
+
+    <script src="https://js.arcgis.com/4.26/"></script>
+    <script>
+        require([
+            "esri/Map",
+            "esri/views/MapView",
+            "esri/geometry/geometryEngine",
+            "esri/Graphic",
+            "esri/geometry/Polyline",
+            "esri/layers/GraphicsLayer"
+        ], function (Map, MapView, geometryEngine, Graphic, Polyline, GraphicsLayer) {
+
+            // Create the map
+            var map = new Map({
+                basemap: "streets-navigation-vector"
+            });
+
+            // Create the MapView
+            var view = new MapView({
+                container: "viewDiv",
+                map: map,
+                center: [-100.33, 25.69],
+                zoom: 3,
+                navigationMode: "classic",
+                constraints: {
+                    minZoom: 2
+                }
+            });
+
+            // Add a GraphicsLayer to hold the points and line
+            var graphicsLayer = new GraphicsLayer();
+            map.add(graphicsLayer);
+
+            var points = [];
+
+            // Listen for click or touch events
+            view.on("click", function(event) {
+                var point = event.mapPoint;
+                points.push([point.longitude, point.latitude]); // Store as [longitude, latitude]
+
+                // Add a point graphic
+                var pointGraphic = new Graphic({
+                    geometry: point,
+                    symbol: {
+                        type: "simple-marker",
+                        color: "blue",
+                        size: "8px"
+                    }
+                });
+                graphicsLayer.add(pointGraphic);
+
+                // If two points are selected, show the display button
+                if (points.length === 2) {
+                    document.getElementById("displayButton").style.display = "block";
+                }
+            });
+
+            // Handle Display Distance button click
+            document.getElementById("displayButton").addEventListener("click", function() {
+                if (points.length === 2) {
+                    try {
+                        // Create a polyline from the two points
+                        var polyline = new Polyline({
+                            paths: [points],
+                            spatialReference: { wkid: 4326 }
+                        });
+
+                        // Calculate the geodesic distance
+                        var geodesicDistance = geometryEngine.geodesicLength(polyline, "kilometers");
+
+                        // Add a line graphic
+                        var lineGraphic = new Graphic({
+                            geometry: polyline,
+                            symbol: {
+                                type: "simple-line",
+                                color: "red",
+                                width: "2px"
+                            }
+                        });
+                        graphicsLayer.add(lineGraphic);
+
+                        // Display the distance in a popup at the second point
+                        view.popup.open({
+                            title: "Geodesic Distance",
+                            content: "The distance between the selected points is " + geodesicDistance.toFixed(2) + " kilometers.",
+                            location: {
+                                longitude: points[1][0],
+                                latitude: points[1][1]
+                            }
+                        });
+
+                        // Hide the display button and clear points array for the next measurement
+                        document.getElementById("displayButton").style.display = "none";
+                        points = [];
+                    } catch (error) {
+                        console.error("Error calculating geodesic distance:", error);
+                        view.popup.open({
+                            title: "Error",
+                            content: "An error occurred while calculating the distance. Please try again.",
+                            location: {
+                                longitude: points[1][0],
+                                latitude: points[1][1]
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
